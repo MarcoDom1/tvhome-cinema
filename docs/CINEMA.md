@@ -17,3 +17,15 @@ Install the ready-made look with `themes/cinema` (see its README). Extra opt-in 
 
 The launcher also has a small easter egg: Up ten times within five seconds, and a mascot hops over the tiles
 (`res/drawable-nodpi/mascot.png`; replace it with your own image).
+
+## Remote buttons that the TV maker handles itself
+
+Some remotes have a button the firmware turns into its own action (on 2021/22 Philips Android TV sets the "Smart TV"
+button opens the Philips app gallery, which is useless once that store is disabled). Turn the launcher's key helper on
+(`HOME_KEY_SERVICE=1` at install, or enable `HomeKeyService` in Accessibility) and map the button in a theme:
+
+```json
+"app_keys": ["326:com.disney.disneyplus", "scan:695:com.disney.disneyplus"]
+```
+
+Find a button's keycode and scancode by pressing it while reading `adb logcat` (on Philips: `GlobalKeyRcv ... key=326, scan=695`).
