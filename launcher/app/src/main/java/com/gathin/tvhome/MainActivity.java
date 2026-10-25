@@ -145,6 +145,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** config.xml ambient_glow, overridable by a theme. Off: the glow view is gone and no fade or colour animator
      *  is started for it, so a focus move costs nothing extra on a launcher that runs all day. */
     private boolean ambientGlow;
+    private int cfgAmbientStrength = 100;
+    private WeatherGlance weather;
+    private int lastGridInner;
+    private final java.util.ArrayList<LightCard> lightCards = new java.util.ArrayList<>();
     /** config.xml app_glow: the highlight takes the focused app's colour on every tile. */
     private boolean appGlow;
     /** config.xml glow_style: the shape setAmbient paints the glow mask in. */
@@ -393,6 +397,94 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // a fade renders it into a full-screen offscreen buffer first.
         ambient.forceHasOverlappingRendering(false);
         ambientGlow = cfg.ambientGlow;
+        cfgAmbientStrength = cfg.ambientStrength;
+        AppAdapter.tileScale = cfg.tileScalePercent / 100f;
+        AppLibraryDialog.gridMode = cfg.libraryGrid;
+        AppLibraryDialog.exclude = new java.util.HashSet<>(cfg.libraryExclude);
+        if (cfg.glassPanel) {
+            View wrap = findViewById(R.id.gridWrap);
+            wrap.setBackgroundResource(R.drawable.grid_glass);
+            int pad = (int) (14 * getResources().getDisplayMetrics().density);
+            wrap.setPadding(pad, pad, pad, pad);
+        }
+        weather = findViewById(R.id.weather);
+        if (!Double.isNaN(cfg.weatherLat) && !Double.isNaN(cfg.weatherLon)) {
+            weather.configure(cfg.weatherCity, cfg.weatherLat, cfg.weatherLon, cfg.weatherFahrenheit, cfg.weatherCard);
+            if (!cfg.weatherCard) weather.getLayoutParams().width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            weather.setVisibility(View.VISIBLE);
+            findViewById(R.id.band).setVisibility(View.VISIBLE);
+        }
+        if (!cfg.lightsJson.isEmpty()) {
+            try {
+                org.json.JSONArray arr = new org.json.JSONArray(cfg.lightsJson);
+                float dens = getResources().getDisplayMetrics().density;
+                boolean round = "round".equals(cfg.lightsStyle);
+                android.widget.LinearLayout band = findViewById(R.id.band);
+                if (round) {
+                    // Round buttons in the band, at its right end, level with the weather.
+                    View spacer = new View(this);
+                    band.addView(spacer, new android.widget.LinearLayout.LayoutParams(0, 1, 1f));
+                    band.setVisibility(View.VISIBLE);
+                    android.widget.LinearLayout group = new android.widget.LinearLayout(this);
+                    group.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+                    if (cfg.lightsCapsule) {
+                        group.setBackgroundResource(R.drawable.glass_pill);
+                        group.setPadding((int) (22 * dens), (int) (8 * dens), (int) (22 * dens), (int) (8 * dens));
+                    }
+                    for (int i = 0; i < arr.length(); i++) {
+                        org.json.JSONObject o = arr.getJSONObject(i);
+                        java.util.ArrayList<LightCard.Device> devs = new java.util.ArrayList<>();
+                        org.json.JSONArray ds = o.getJSONArray("devices");
+                        for (int j = 0; j < ds.length(); j++) devs.add(new LightCard.Device(ds.getJSONObject(j).getString("mac"), ds.getJSONObject(j).optString("kind", "bulb")));
+                        LightCard card = new LightCard(this, o.optString("name", "Luz"), devs, true);
+                        card.setAlwaysLabel(cfg.lightsCapsule);
+                        card.setScale(cfg.lightsScalePercent / 100f);
+                        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(
+                                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                        if (i > 0) lp.setMarginStart((int) (14 * dens));
+                        group.addView(card, lp);
+                    }
+                    // Level with the weather: the circle sits above its label space, so the group is lowered a little.
+                    android.widget.LinearLayout.LayoutParams glp = new android.widget.LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    if (!cfg.lightsCapsule) glp.topMargin = (int) (30 * dens);
+                    band.addView(group, glp);
+                } else {
+                // One glass panel beside the apps' panel, with a button per light in two columns.
+                android.widget.LinearLayout panel = findViewById(R.id.lightsPanel);
+                panel.setBackgroundResource(R.drawable.grid_glass);
+                int pad = (int) (16 * dens), gap = (int) (14 * dens);
+                panel.setPadding(pad, pad, pad, pad);
+                panel.setGravity(android.view.Gravity.CENTER);
+                panel.getLayoutParams().width = (int) (getResources().getDisplayMetrics().widthPixels * cfg.lightsWidthPercent / 100f);
+                int rows = (arr.length() + 1) / 2;
+                for (int r = 0; r < rows; r++) {
+                    android.widget.LinearLayout row = new android.widget.LinearLayout(this);
+                    row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+                    android.widget.LinearLayout.LayoutParams rlp = new android.widget.LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    if (r > 0) rlp.topMargin = gap;
+                    panel.addView(row, rlp);
+                    for (int c2 = 0; c2 < 2; c2++) {
+                        int i = r * 2 + c2;
+                        if (i >= arr.length()) break;
+                        org.json.JSONObject o = arr.getJSONObject(i);
+                        java.util.ArrayList<LightCard.Device> devs = new java.util.ArrayList<>();
+                        org.json.JSONArray ds = o.getJSONArray("devices");
+                        for (int j = 0; j < ds.length(); j++) devs.add(new LightCard.Device(ds.getJSONObject(j).getString("mac"), ds.getJSONObject(j).optString("kind", "bulb")));
+                        LightCard card = new LightCard(this, o.optString("name", "Luz"), devs, false);
+                        android.widget.LinearLayout.LayoutParams lp = new android.widget.LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                        if (c2 > 0) lp.setMarginStart(gap);
+                        row.addView(card, lp);
+                        lightCards.add(card);
+                    }
+                }
+                panel.setVisibility(View.VISIBLE);
+                }
+            } catch (Exception ignored) {
+                // a malformed "lights" entry leaves the band as it was
+            }
+        }
         appGlow = cfg.appGlow;
         if (!ambientGlow) ambient.setVisibility(View.GONE);
         heroName = findViewById(R.id.heroName);
@@ -519,7 +611,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             int h = b - t;
             // Item height follows the tile size, which follows the columns and the rows that must fit (AppAdapter.tileWidthPx).
+            int endPad = cfg.gridWidthPercent >= 100 ? (int) (10 * density) : (int) ((r - l) * (100 - cfg.gridWidthPercent) / 100f);
+            if (grid.getPaddingRight() != endPad) {
+                grid.setPadding(grid.getPaddingLeft(), grid.getPaddingTop(), endPad, grid.getPaddingBottom());
+                // Tiles made at the old width are rebuilt for the new one; a layout asked for from inside a layout pass is dropped.
+                grid.post(() -> { grid.setAdapter(null); grid.setAdapter(adapter); });
+            }
             int inner = (r - l) - grid.getPaddingLeft() - grid.getPaddingRight();
+            // The tiles were sized for the width the grid had when they were made; if a neighbour (the lights' panel)
+            // narrows it afterwards, make them again for the new width.
+            if (lastGridInner != inner) {
+                boolean first = lastGridInner == 0;
+                lastGridInner = inner;
+                if (!first) grid.post(() -> { grid.setAdapter(null); grid.setAdapter(adapter); });
+            }
             int tileW = AppAdapter.tileWidthPx(inner, h, COLUMNS, rowsBelowDock, cfg.dockTitle, cfg.dockRow, density);
             int itemH = AppAdapter.itemHeightPx(AppAdapter.tileHeightPx(tileW), density);
             int dockRow = itemH + (int) (AppAdapter.DOCK_EXTRA_DP * density);   // item height plus DockDecoration offsets
@@ -532,9 +637,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // room above the dock and the last rows run off the bottom instead of the title drawing over the clock.
             if (MainActivity.this.dockRow && cfg.dockTitle && rowsBelowDock > 0) want = Math.max(want, (int) (AppAdapter.TITLE_ROOM_DP * density));
             // No dock to push down: the grid starts at the top, with room for the first row's zoom and glass.
-            if (!MainActivity.this.dockRow) want = (int) (AppAdapter.TOP_ROOM_DP * density);
+            if (!MainActivity.this.dockRow) want = (int) (AppAdapter.TOP_ROOM_DP * density) + (int) (h * cfg.gridTopPercent / 100f);
             if (grid.getPaddingTop() != want) {
                 grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
+                grid.post(grid::requestLayout);   // a layout asked for from inside a layout pass is dropped
+                grid.postDelayed(this::moveGlassToFocus, 150);   // the focus glass follows its tile to the new place
+                grid.postDelayed(this::moveGlassToFocus, 600);
             }
             // Cold start or column count > 4: the first focus can run before the grid has its final width or
             // padding, leaving the glass at the XML design size until a key is pressed.
@@ -792,6 +900,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onResume() {
         super.onResume();
+        if (weather != null && weather.getVisibility() == View.VISIBLE) weather.refreshIfStale();
         // A festival that started or ended while Home was in the background: rebuild with or without it.
         if (festive != festival.active(LocalDate.now())) {
             recreate();
@@ -1109,6 +1218,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        countUpPresses(event);
         if (handleSettingsKey(event)) return true;
         if (tileMenuEnabled && !reordering && openPopup == null && cardPrompt == null
                 && event.getKeyCode() == KeyEvent.KEYCODE_MENU) {
@@ -1530,6 +1640,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     /** Refits the glass to the focused holder once the grid layout and tile dimensions settle. */
+    /** Puts the focus glass on the focused tile where it now is (the grid moved under it). */
+    private void moveGlassToFocus() {
+        if (isDestroyed() || adapter.appCount() == 0 || libraryFocusPending) return;
+        int pos = focusedTilePosition();
+        if (pos < 0) return;
+        RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(pos);
+        View card = vh == null ? null : vh.itemView.findViewById(R.id.card);
+        if (card != null && card.getWidth() > 0 && card.isFocused()) onTileFocused(pos, card);
+    }
+
     private void refitGlass() {
         if (isDestroyed() || adapter.appCount() == 0 || libraryFocusPending) return;
         int pos = Math.max(0, Math.min(lastFocused, adapter.appCount() - 1));
@@ -1754,6 +1874,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                         new int[]{0xA6FFFFFF, 0x47FFFFFF, 0x00FFFFFF},
                         new float[]{0f, 0.5f, 1f},
                         Shader.TileMode.CLAMP));
+            } else if (Config.GLOW_AURA.equals(glowStyle)) {
+                // A wide halo of the app's colour: strong at the top and behind the middle of the screen, still
+                // fading to black at the bottom edge so the app names stay readable.
+                paint.setShader(new LinearGradient(0, 0, 0, h * 0.85f,
+                        new int[]{0xB3FFFFFF, 0x59FFFFFF, 0x00FFFFFF},
+                        new float[]{0f, 0.45f, 1f},
+                        Shader.TileMode.CLAMP));
+                canvas.drawRect(0, 0, w, h, paint);
+                paint.setShader(new RadialGradient(
+                        w * 0.5f, h * 0.55f, w * 0.62f,
+                        new int[]{0x8CFFFFFF, 0x38FFFFFF, 0x00FFFFFF},
+                        new float[]{0f, 0.55f, 1f},
+                        Shader.TileMode.CLAMP));
             } else if (Config.GLOW_HORIZON.equals(glowStyle)) {
                 // The colour washes down from the top edge and fades out three quarters of the way down,
                 // with a brighter band along the top like light over a horizon.
@@ -1777,6 +1910,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             canvas.drawRect(0, 0, w, h, paint);
             glow = new BitmapDrawable(getResources(), bmp);
             glow.setGravity(Gravity.FILL);
+            glow.setAlpha(255 * cfgAmbientStrength / 100);
             ambient.setBackground(glow);
         }
         // The default tint mode, SRC_IN, keeps the mask's alpha and takes the colour from the tint.
@@ -2066,8 +2200,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
             // In the dock, the last app is the row's end: the empty slots after it take no focus.
             int rowCount = position < COLUMNS ? Math.min(count, adapter.dockFilled()) : count;
-            return GridNavigation.atHorizontalEdge(position, rowCount, COLUMNS,
+            boolean edge = GridNavigation.atHorizontalEdge(position, rowCount, COLUMNS,
                     rtlAppGrid, keyCode == KeyEvent.KEYCODE_DPAD_LEFT);
+            // The light cards stand beside the grid: from the last column, forward goes to the one level with the tile.
+            if (edge && forward && !lightCards.isEmpty()) {
+                View from = getCurrentFocus();
+                int[] loc = new int[2];
+                float fy = 0;
+                if (from != null) { from.getLocationOnScreen(loc); fy = loc[1] + from.getHeight() / 2f; }
+                LightCard best = null;
+                float bestD = Float.MAX_VALUE;
+                for (LightCard lc : lightCards) {
+                    lc.getLocationOnScreen(loc);
+                    float d = Math.abs(loc[1] + lc.getHeight() / 2f - fy);
+                    if (d < bestD) { bestD = d; best = lc; }
+                }
+                if (best != null) { best.requestFocus(); return true; }
+            }
+            return edge;
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
             if (position < COLUMNS) return false;          // dock row: let focus move to the top bar
@@ -2453,6 +2603,43 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (previous != null) previous.onFocusChange(v, focused);
             if (focused) action.run();
         });
+    }
+
+    /** Easter egg: Up pressed 10 times within 5 seconds, with nothing open, sends a mascot hopping over the tiles. */
+    private final long[] upPresses = new long[10];
+    private int upCount;
+
+    private void countUpPresses(KeyEvent event) {
+        if (event.getKeyCode() != KeyEvent.KEYCODE_DPAD_UP || event.getAction() != KeyEvent.ACTION_DOWN
+                || event.getRepeatCount() != 0 || openPopup != null || reordering) return;
+        long now = event.getEventTime();
+        upPresses[upCount % upPresses.length] = now;
+        upCount++;
+        if (upCount >= upPresses.length && now - upPresses[upCount % upPresses.length] <= 5000) {
+            upCount = 0;
+            playMascot();
+        }
+    }
+
+    private void playMascot() {
+        if (isFinishing() || isDestroyed() || grid == null) return;
+        int[] rootPos = new int[2], pos = new int[2];
+        root.getLocationOnScreen(rootPos);
+        java.util.ArrayList<float[]> spots = new java.util.ArrayList<>();
+        for (int i = 0; i < grid.getChildCount(); i++) {
+            View card = grid.getChildAt(i).findViewById(R.id.card);
+            if (card == null || card.getWidth() == 0) continue;
+            card.getLocationOnScreen(pos);
+            spots.add(new float[] {pos[0] - rootPos[0] + card.getWidth() / 2f, pos[1] - rootPos[1] + card.getHeight() * 0.1f});
+        }
+        if (spots.isEmpty()) return;
+        java.util.Collections.sort(spots, (a, b) -> Math.abs(a[1] - b[1]) < 20 ? Float.compare(a[0], b[0]) : Float.compare(a[1], b[1]));
+        int n = Math.min(spots.size(), 7);
+        float[] xs = new float[n], ys = new float[n];
+        for (int i = 0; i < n; i++) { xs[i] = spots.get(i)[0]; ys[i] = spots.get(i)[1]; }
+        MascotView dog = new MascotView(this);
+        root.addView(dog, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        dog.play(xs, ys, () -> root.removeView(dog));
     }
 
     private void playPetalShower() {

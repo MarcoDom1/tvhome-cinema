@@ -346,12 +346,41 @@
             </LinearLayout>
         </RelativeLayout>
 
+        <!-- Band between the header and the grid: the weather card (weather_lat/weather_lon in a theme) and, next to it,
+             whatever else a build puts there. Gone, it takes no space. -->
+        <LinearLayout
+            android:id="@+id/band"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:clipChildren="false"
+            android:visibility="gone">
+
+            <com.gathin.tvhome.WeatherGlance
+                android:id="@+id/weather"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone" />
+        </LinearLayout>
+
         <!-- The wrapper clips at the grid's edge; the grid itself must not clip so scaled tiles can overflow their cells. -->
-        <FrameLayout
+        <LinearLayout
+            android:id="@+id/mainRow"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:layout_marginTop="10dp">
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="26dp"
+            android:orientation="horizontal"
+            android:clipChildren="false">
+
+        <FrameLayout
+            android:id="@+id/gridWrap"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/grid"
@@ -367,6 +396,16 @@
                 android:scrollbars="none"
                 android:descendantFocusability="afterDescendants" />
         </FrameLayout>
+
+        <!-- Beside the apps' panel, only with "lights" in a theme: a second glass panel holding one button per light. -->
+        <LinearLayout
+            android:id="@+id/lightsPanel"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginStart="22dp"
+            android:orientation="vertical"
+            android:visibility="gone" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- The single floating glass highlight that springs between tiles. -->

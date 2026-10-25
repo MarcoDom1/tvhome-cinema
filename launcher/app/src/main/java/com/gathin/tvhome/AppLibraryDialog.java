@@ -97,6 +97,10 @@ final class AppLibraryDialog {
     private PopupWindow actionPopup;
     private RecyclerView catalog;
     private FrameLayout shelf;
+    /** Several smaller rows instead of one shelf; OK opens an app and holding OK offers Add to Home (config.json library_grid). */
+    static boolean gridMode;
+    /** Packages the library never lists (config.json library_exclude): vendor service apps nobody opens. */
+    static java.util.Set<String> exclude = java.util.Collections.emptySet();
     private GlassView highlight;
     private SpringAnimation spring;
     private float scrollOffset;
@@ -111,7 +115,7 @@ final class AppLibraryDialog {
     }
 
     private void highlight(View card, boolean animate) {
-        if (highlight == null || card.getParent() == null) return;
+        if (gridMode || highlight == null || card.getParent() == null) return;
         Rect rect = new Rect(0, 0, card.getWidth(), card.getHeight());
         shelf.offsetDescendantRectToMyCoords(card, rect);
         ViewGroup.LayoutParams lp = highlight.getLayoutParams();
@@ -155,11 +159,11 @@ final class AppLibraryDialog {
         panel.setLayoutDirection(rtl ? View.LAYOUT_DIRECTION_RTL : View.LAYOUT_DIRECTION_LTR);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(12), dp(8), dp(12), dp(12));
-        panel.setBackgroundResource(R.drawable.glass_panel);
+        panel.setBackgroundResource(R.drawable.library_panel);
         View decor = activity.getWindow().getDecorView();
-        catalogWidth = Math.min(dp(800), Math.max(dp(200), decor.getWidth() - dp(64)));
+        catalogWidth = Math.min(dp(gridMode ? 900 : 800), Math.max(dp(200), decor.getWidth() - dp(64)));
         int width = catalogWidth;
-        int height = dp(280);
+        int height = dp(320);
         popup = new PopupWindow(panel, width, height, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         popup.setOutsideTouchable(true);
@@ -193,7 +197,7 @@ final class AppLibraryDialog {
         if (container.getLayoutParams() instanceof WindowManager.LayoutParams) {
             WindowManager.LayoutParams params = (WindowManager.LayoutParams) container.getLayoutParams();
             params.flags |= WindowManager.LayoutParams.FLAG_DIM_BEHIND;
-            params.dimAmount = 0.55f;
+            params.dimAmount = 0.82f;
             activity.getWindowManager().updateViewLayout(container, params);
         }
         panel.setAlpha(0f);
@@ -226,7 +230,7 @@ final class AppLibraryDialog {
                     if (info.activityInfo == null || !info.activityInfo.exported) continue;
                     String pkg = info.activityInfo.packageName;
                     if (Intent.CATEGORY_LEANBACK_LAUNCHER.equals(category)) tv.add(pkg);
-                    if (!pkg.equals(self) && !unique.containsKey(pkg)) unique.put(pkg, info);
+                    if (!pkg.equals(self) && !exclude.contains(pkg) && !unique.containsKey(pkg)) unique.put(pkg, info);
                 }
             }
             Map<String, String> names = new HashMap<>();
@@ -331,9 +335,17 @@ final class AppLibraryDialog {
         panel.addView(title, new LinearLayout.LayoutParams(-1, -2));
     }
 
+    private String gridHint() {
+        String lang = java.util.Locale.getDefault().getLanguage();
+        if (!gridMode) return activity.getString(R.string.library_hint_add);
+        if (lang.equals("es")) return "Pulsa para abrir · Mantén para añadir a Inicio u otras opciones";
+        if (lang.equals("it")) return "Premi per aprire · Tieni premuto per aggiungere alla Home o altre opzioni";
+        return "Press to open · Hold to add to Home or for more options";
+    }
+
     private void showCatalog() {
         stopHighlight();
-        resize(catalogWidth, dp(280));
+        resize(catalogWidth, dp(gridMode ? 470 : 280));
         panel.removeAllViews();
         LinearLayout header = new LinearLayout(activity);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -348,7 +360,7 @@ final class AppLibraryDialog {
         count.setSingleLine(true);
         header.addView(count, new LinearLayout.LayoutParams(-2, -2));
         panel.addView(header, new LinearLayout.LayoutParams(-1, dp(44)));
-        instructions = text(activity.getString(R.string.library_hint_add), 13, 0xBBFFFFFF);
+        instructions = text(gridHint(), 13, 0xBBFFFFFF);
         instructions.setSingleLine(true);
         instructions.setEllipsize(TextUtils.TruncateAt.END);
         instructions.setPadding(dp(12), 0, dp(12), dp(6));
@@ -368,7 +380,12 @@ final class AppLibraryDialog {
         RecyclerView list = new RecyclerView(activity);
         list.setLayoutDirection(rtl ? View.LAYOUT_DIRECTION_RTL : View.LAYOUT_DIRECTION_LTR);
         catalog = list;
-        list.setLayoutManager(new LinearLayoutManager(activity, RecyclerView.HORIZONTAL, false) {
+        if (gridMode) {
+            int cols = Math.max(3, (catalogWidth - dp(44)) / dp(116));
+            list.setLayoutManager(new androidx.recyclerview.widget.GridLayoutManager(activity, cols) {
+                @Override protected boolean isLayoutRTL() { return rtl; }
+            });
+        } else list.setLayoutManager(new LinearLayoutManager(activity, RecyclerView.HORIZONTAL, false) {
             @Override protected boolean isLayoutRTL() { return rtl; }
         });
         list.setItemAnimator(null);
@@ -558,10 +575,10 @@ final class AppLibraryDialog {
     private final class Catalog extends RecyclerView.Adapter<Row> {
         @NonNull @Override public Row onCreateViewHolder(@NonNull ViewGroup parent, int type) {
             FrameLayout row = new FrameLayout(activity);
-            RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(dp(132), dp(170));
-            params.setMargins(dp(6), dp(2), dp(6), dp(2));
+            RecyclerView.LayoutParams params = gridMode ? new RecyclerView.LayoutParams(dp(108), dp(100)) : new RecyclerView.LayoutParams(dp(132), dp(170));
+            params.setMargins(dp(gridMode ? 4 : 6), dp(2), dp(gridMode ? 4 : 6), dp(2));
             row.setLayoutParams(params);
-            row.setPadding(dp(10), dp(12), dp(10), dp(10));
+            if (gridMode) row.setPadding(dp(6), dp(8), dp(6), dp(6)); else row.setPadding(dp(10), dp(12), dp(10), dp(10));
             row.setFocusableInTouchMode(true);
             row.setClickable(true);
             LinearLayout content = new LinearLayout(activity);
@@ -571,13 +588,13 @@ final class AppLibraryDialog {
             ImageView icon = new ImageView(activity);
             icon.setId(R.id.icon);
             icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            content.addView(icon, new LinearLayout.LayoutParams(dp(60), dp(60)));
-            TextView name = text("", 15, Color.WHITE);
+            content.addView(icon, new LinearLayout.LayoutParams(dp(gridMode ? 42 : 60), dp(gridMode ? 42 : 60)));
+            TextView name = text("", gridMode ? 12 : 15, Color.WHITE);
             name.setId(R.id.title);
             name.setGravity(Gravity.CENTER);
             name.setMaxLines(2);
-            LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(-1, dp(44));
-            nameParams.topMargin = dp(10);
+            LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(-1, dp(gridMode ? 32 : 44));
+            nameParams.topMargin = dp(gridMode ? 6 : 10);
             content.addView(name, nameParams);
             TextView status = text("", 11, 0xBBFFFFFF);
             status.setId(R.id.status);
@@ -602,7 +619,7 @@ final class AppLibraryDialog {
             boolean home = onHome.test(pkg);
             boolean recent = LibraryApps.recent(installTimes.getOrDefault(pkg, 0L), catalogTime);
             status.setText(home ? R.string.library_on_home : recent ? R.string.library_recent : R.string.library_add_home);
-            status.setVisibility(View.VISIBLE);
+            status.setVisibility(gridMode ? View.GONE : View.VISIBLE);
             holder.itemView.setBackground(surface(home ? 0x1475BBA4 : 0x0CFFFFFF, 18));
             View check = holder.itemView.findViewById(R.id.dot);
             check.getLayoutParams().width = dp(home ? 18 : 8);
@@ -611,14 +628,19 @@ final class AppLibraryDialog {
             else check.setBackground(surface(0xFF70D9A0, 8));
             check.setVisibility(home || recent ? View.VISIBLE : View.GONE);
             holder.itemView.setOnClickListener(v -> {
-                if (onHome.test(pkg)) open(app);
+                if (gridMode || onHome.test(pkg)) open(app);
                 else changeHome(app, true);
             });
             holder.itemView.setOnLongClickListener(v -> { showActions(app, v); return true; });
             holder.itemView.setOnFocusChangeListener((v, focused) -> {
+                if (gridMode) {   // no sliding glass: the focused card lights up itself
+                    GradientDrawable bgd = surface(focused ? 0x40FFFFFF : onHome.test(pkg) ? 0x1475BBA4 : 0x0CFFFFFF, 18);
+                    if (focused) bgd.setStroke(dp(2), 0xE6FFFFFF);
+                    v.setBackground(bgd);
+                }
                 if (focused) {
                     selectedPackage = pkg;
-                    instructions.setText(onHome.test(pkg)
+                    if (!gridMode) instructions.setText(onHome.test(pkg)
                             ? R.string.library_hint_open : R.string.library_hint_add);
                     v.post(() -> { if (v.hasFocus() && catalog != null) highlight(v, true); });
                     int index = holder.getBindingAdapterPosition();
@@ -627,6 +649,7 @@ final class AppLibraryDialog {
             });
             holder.itemView.setOnKeyListener((v, key, event) -> {
                 int index = holder.getBindingAdapterPosition();
+                if (gridMode) return false;   // the grid's own focus search moves between rows and columns
                 return event.getAction() == KeyEvent.ACTION_DOWN && (key == KeyEvent.KEYCODE_DPAD_UP
                         || key == KeyEvent.KEYCODE_DPAD_DOWN
                         || (rtl ? key == KeyEvent.KEYCODE_DPAD_RIGHT : key == KeyEvent.KEYCODE_DPAD_LEFT) && index == 0

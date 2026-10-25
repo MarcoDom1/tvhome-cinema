@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- library_panel: the App library's own surface, opaque and dark so it reads clearly over Home. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:angle="90" android:startColor="#FF0A0E1C" android:endColor="#FF141A30" />
+    <corners android:radius="28dp" />
+    <stroke android:width="1.5dp" android:color="#40FFFFFF" />
+</shape>

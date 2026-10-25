@@ -175,10 +175,41 @@ final class Config {
     final boolean dockGlass;
     /** The dock band's padding equals the gap between its tiles (config.xml, dock_even_padding); false keeps the fixed padding. */
     final boolean dockEvenPadding;
+    /** Share of the screen width the app grid may use, from the left (config.json grid_width_percent, 40-100). */
+    final int gridWidthPercent;
+    /** Strength of the ambient glow in percent (config.json ambient_strength, 10-100). */
+    final int ambientStrength;
+    /** Weather line (config.json weather_lat, weather_lon, weather_city, weather_unit "f"); off without coordinates. */
+    final double weatherLat, weatherLon;
+    final String weatherCity;
+    final boolean weatherFahrenheit;
+    /** Tile size as a percentage of the design size (config.json tile_scale_percent, 40-130). */
+    final int tileScalePercent;
+    /** false hides the library pill under the grid when the round library button is on (config.json show_library_pill). */
+    final boolean showLibraryPill;
+    /** A frosted-glass slab behind the app grid (config.json glass_panel). */
+    final boolean glassPanel;
+    /** WiZ lights and plugs as cards in the band (config.json lights: [{"name", "mac", "type": "bulb"|"plug"}]); "" = none. */
+    final String lightsJson;
+    /** Width of the light-card column in percent of the screen (config.json lights_width_percent, 15-45). */
+    final int lightsWidthPercent;
+    /** true (default): the weather is a glass card; false: plain text beside the clock (config.json weather_card). */
+    final boolean weatherCard;
+    /** "tiles" (a panel beside the grid) or "round" (round buttons in the band under the header) (config.json lights_style). */
+    final String lightsStyle;
+    /** Extra space above the grid in percent of its height, to stand the apps lower on the screen (config.json grid_top_percent). */
+    final int gridTopPercent;
+    /** A soft glass capsule behind the round light buttons, with the names always shown (config.json lights_capsule). */
+    final boolean lightsCapsule;
+    /** Size of the round light buttons in percent (config.json lights_scale_percent, 70-180). */
+    final int lightsScalePercent;
+    /** The App library as a grid of several smaller rows (config.json library_grid). */
+    final boolean libraryGrid;
+    final java.util.List<String> libraryExclude;
     /** Shape of the glow behind the focused app (config.xml, glow_style): {@link #GLOW_RADIAL} or {@link #GLOW_HORIZON}. */
     final String glowStyle;
 
-    static final String GLOW_RADIAL = "radial", GLOW_HORIZON = "horizon";
+    static final String GLOW_RADIAL = "radial", GLOW_HORIZON = "horizon", GLOW_AURA = "aura";
     /** Show each rotating wallpaper's name from wallpapers/captions.txt (config.xml / theme wallpaper_captions). */
     final boolean wallpaperCaptions;
     /** Answer VIEW_INPUTS with the Inputs menu (handle_view_inputs); see InputsRequestActivity. */
@@ -198,7 +229,9 @@ final class Config {
                    Festival festival, int[] inputKeycodes, List<String> appKeys, String stockHomeRedirect,
                    List<RaceWeekend.Race> raceCalendar, boolean cinematicHome, boolean ambientGlow, boolean appGlow, int homeIdleClockMinutes,
                    boolean keyFilter, boolean dockGlass, String glowStyle, boolean wallpaperCaptions,
-                   boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding) {
+                   boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding, int gridWidthPercent, int ambientStrength,
+                   double weatherLat, double weatherLon, String weatherCity, boolean weatherFahrenheit, int tileScalePercent, boolean showLibraryPill, boolean glassPanel, String lightsJson, int lightsWidthPercent,
+                   boolean weatherCard, String lightsStyle, int gridTopPercent, boolean lightsCapsule, int lightsScalePercent, boolean libraryGrid, java.util.List<String> libraryExclude) {
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -269,12 +302,31 @@ final class Config {
         this.homeIdleClockMinutes = homeIdleClockMinutes;
         this.dockGlass = dockGlass;
         this.dockEvenPadding = dockEvenPadding;
+        this.gridWidthPercent = gridWidthPercent;
+        this.ambientStrength = ambientStrength;
+        this.weatherLat = weatherLat;
+        this.weatherLon = weatherLon;
+        this.weatherCity = weatherCity;
+        this.weatherFahrenheit = weatherFahrenheit;
+        this.tileScalePercent = tileScalePercent;
+        this.showLibraryPill = showLibraryPill;
+        this.glassPanel = glassPanel;
+        this.lightsJson = lightsJson;
+        this.lightsWidthPercent = lightsWidthPercent;
+        this.weatherCard = weatherCard;
+        this.lightsStyle = lightsStyle;
+        this.gridTopPercent = gridTopPercent;
+        this.lightsCapsule = lightsCapsule;
+        this.lightsScalePercent = lightsScalePercent;
+        this.libraryGrid = libraryGrid;
+        this.libraryExclude = libraryExclude;
         this.glowStyle = glowStyle(glowStyle);
         this.wallpaperCaptions = wallpaperCaptions;
     }
 
     /** A known glow_style, or radial (the default) for anything else. */
     static String glowStyle(String value) {
+        if (value != null && GLOW_AURA.equalsIgnoreCase(value.trim())) return GLOW_AURA;
         return value != null && GLOW_HORIZON.equalsIgnoreCase(value.trim()) ? GLOW_HORIZON : GLOW_RADIAL;
     }
 
@@ -470,7 +522,25 @@ final class Config {
                 Math.max(0, Math.min(100, skyIntensity)), settingsKeycodes, settingsKeyPanel, restoreKeyServices, wallpaperEnabled, wallpaper,
                 wallpapers, rotationMinutes, wallpaperDim, dockOpacity, wallpaperOrder, applied,
                 festival, inputKeycodes, appKeys, stockHomeRedirect, json == null ? Collections.emptyList() : raceCalendar(json), cinematic, ambientGlow, appGlow,
-                Math.max(0, idleClockMinutes), keyFilter, dockGlass, glowStyle, wallpaperCaptions, handleViewInputs, tileMenu, dockEvenPadding);
+                Math.max(0, idleClockMinutes), keyFilter, dockGlass, glowStyle, wallpaperCaptions, handleViewInputs, tileMenu, dockEvenPadding,
+                json == null ? 100 : integer(json, "grid_width_percent", 100, 40, 100),
+                json == null ? 100 : integer(json, "ambient_strength", 100, 10, 100),
+                json == null ? Double.NaN : json.optDouble("weather_lat", Double.NaN),
+                json == null ? Double.NaN : json.optDouble("weather_lon", Double.NaN),
+                json == null ? "" : string(json, "weather_city", ""),
+                json != null && "f".equalsIgnoreCase(string(json, "weather_unit", "c")),
+                json == null ? 100 : integer(json, "tile_scale_percent", 100, 40, 130),
+                json == null || bool(json, "show_library_pill", true),
+                json != null && bool(json, "glass_panel", false),
+                json == null || json.optJSONArray("lights") == null ? "" : json.optJSONArray("lights").toString(),
+                json == null ? 30 : integer(json, "lights_width_percent", 30, 15, 45),
+                json == null || bool(json, "weather_card", true),
+                json == null ? "tiles" : string(json, "lights_style", "tiles"),
+                json == null ? 0 : integer(json, "grid_top_percent", 0, 0, 70),
+                json != null && bool(json, "lights_capsule", false),
+                json == null ? 100 : integer(json, "lights_scale_percent", 100, 70, 180),
+                json != null && bool(json, "library_grid", false),
+                json == null ? Collections.<String>emptyList() : stringList(json, "library_exclude", Collections.<String>emptyList()));
     }
 
     /**
